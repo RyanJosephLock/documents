@@ -23,7 +23,7 @@
 
 ### Login via Terminal
 ```bash
-sf org login web --alias srgSIT --instance-url https://test.my.salesforce.com/
+sf org login web --alias ExactPath --instance-url https://test.my.salesforce.com/
 ```
 
 ### View Logged-in Orgs
