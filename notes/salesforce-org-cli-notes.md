@@ -1,149 +1,169 @@
-# Setup VS Code
+# Salesforce CLI & VS Code Cheat Sheet
 
-Install VS Code Extensions
- - Gitlens
- - Git History
- - Salesforce Extension Pack (Expanded)
+> Tip: run `sf <command> --help` on any command below to see the full list of flags/options.
 
-PC Downloads
- - Node.js (to install Salesforce CLI)
- - JDK 21 or higher (https://adoptium.net) (for salesforce extension commands - SDFX)
+---
 
+## 1. Environment Setup
 
-----
-----
+### VS Code Extensions
+- **GitLens**
+- **Git History**
+- **Salesforce Extension Pack (Expanded)**
 
-# Salesforce CLI (Hint: view more command options with --help)
+### Required Installs
+| Tool | Purpose | Link |
+|---|---|---|
+| Node.js | Needed to install the Salesforce CLI | https://nodejs.org |
+| JDK 21+ | Needed for Salesforce Extension Pack / SFDX commands | https://adoptium.net |
 
---
+---
 
-# Connection & Deploy
+## 2. Connection & Deploy
 
-## Login via Terminal (SF User)
-sf org login web --alias srgSIT --instance-url https://superretailgroupservicesptyltd--sit.sandbox.my.salesforce.com/
+### Login via Terminal
+```bash
+sf org login web --alias srgSIT --instance-url https://test.my.salesforce.com/
+```
 
-## View logged in users
+### View Logged-in Orgs
+```bash
 sf org list
+```
 
-## Connect Local SF Project (Requires SF project to be in files)
-sf config set target-org <username of org>
+### Connect a Local Project to an Org
+> Requires the SFDX project files to already exist locally.
+```bash
+sf config set target-org <username-or-alias>
+```
 
-## Open a previously connected org
+### Open a Previously Connected Org
+```bash
 sf org open
+```
 
-## Project Deployment (manual and pipeline)
+### Deploy a Project (manual or pipeline)
+```bash
 sf project deploy
+```
 
---
+---
 
-# Generate Components
+## 3. Generate Components
 
-## Create Apex Class
-sf apex generate class --name AccountService --output-dir force-app/main/default
+| What | Command |
+|---|---|
+| Apex Class | `sf apex generate class --name AccountService --output-dir force-app/main/default` |
+| Apex Test Class | `sf apex generate class --name AccountServiceTest --output-dir force-app/main/default --template ApexUnitTest` |
+| Apex Trigger | `sf apex generate trigger --name AccountTrigger --output-dir force-app/main/default/triggers` |
+| Custom Object | `sf schema generate sobject --label "Initiatives"` |
+| Object Field | `sf schema generate field --label "Start Date" --object force-app/main/default/objects/Initiative__c` |
 
-## Create Apex Test Class
-sf apex generate class --name AccountServiceTest --output-dir force-app/main/default --template ApexUnitTest
+---
 
-## Create Apex Trigger
-sf apex generate trigger --name AccountTrigger --output-dir force-app/main/default/triggers
+## 4. Deploy Metadata to an Org
 
-## Create Objects
-sf schema generate sobject --label "Initiatives"
+### Preview Changes (local vs. org)
+> Add unwanted components to `.forceignore` to exclude them.
+```bash
+sf project deploy preview --target-org <alias>
+```
 
-## Create Object Fields
-sf schema generate field --label "Start Date" --object force-app/main/default/objects/Initiative__C
+### Validate Only (no deploy)
+```bash
+sf project deploy validate --target-org <alias> --source-dir force-app/main/default
+```
 
---
+### Deploy Specific File(s)
+> Repeat `--source-dir` for multiple files/folders.
+```bash
+sf project deploy start --target-org <alias> --source-dir force-app/main/default/classes/AccountService.cls
+```
 
-# Deploy Metadata To Org
+### Deploy Specific Metadata Type(s)
+```bash
+sf project deploy start --target-org <alias> --metadata ApexTrigger --metadata ApexClass:AccountService
+```
 
-## Compare local files with target org, check for components to be deployed (add to .forceignore to remove)
-sf project deploy preview --target-org <target org alias>
+### Deploy via Manifest File
+> Edit `manifest/package.xml` to list what should be deployed. You can maintain multiple manifest files for different purposes.
+```bash
+sf project deploy start --target-org <alias> --manifest manifest/package.xml
+```
 
-## Validate all components in project
-sf project deploy validate --target-org <target org alias> --source-dir force-app/main/default
+---
 
-## Deploy specific folders or components (Hint: can include multiple --source-dir for multiple files)
-sf project deploy start --target-org <target org alias> --source-dir force-app/main/default/classes/AccountService.cls
+## 5. Retrieve Metadata from an Org
 
-## Deploy specific metadata
-sf project deploy start --target-org <target org alias> --metadata ApexTrigger --metadata ApexClass:AccountService
+### Preview Changes (org vs. local)
+```bash
+sf project retrieve preview --target-org <alias>
+```
 
-## Deploy using manifest file
-DO: Edit the file manifest/package.xml to include list of what should be deployed (note: can have multiple manifest files)
-sf project deploy start --target-org <target org alias> --manifest manifest/package.xml
+### Retrieve Everything
+> ⚠️ Rarely needed — pulls **all** metadata from the org.
+```bash
+sf project retrieve start --target-org <alias>
+```
 
---
+### Retrieve Specific Metadata Type(s)
+```bash
+sf project retrieve start --target-org <alias> --metadata ApexClass
+sf project retrieve start --target-org <alias> --metadata ApexClass:ClassName
+```
 
-# Retrieve Metadata From Org
+### Retrieve via Manifest File
+```bash
+sf project retrieve start --target-org <alias> --manifest manifest/package.xml
+```
 
-## Compare what's in org vs local files
-sf project retrieve preview --target-org <target org alias>
+---
 
-## Retrieve ALL metadata from salesforce org (this retrieves everything and WON'T be used 99% of time)
-sf project retrieve start --target-org <target org alias>
+## 6. SOQL & SOSL Queries
 
-## Retrieve specific metadata types from salesforce org
-sf project retrieve start --target-org <target org alias> --metadata ApexClass (or ApexClass:ClassName)
+### Basic SOQL Query
+```bash
+sf data query --query "SELECT Id, Name, Account.Name FROM Opportunity ORDER BY Amount DESC LIMIT 10" --target-org ExactPath
+```
 
-## Retrieve metadata based on manifest file
-DO: Edit the file manifest/package.xml to include list of what should be retrieved (note: can have multiple manifest files)
-sf project retrieve start --target-org <target org alias> --manifest manifest/package.xml
-
---
-
-# Run SOQL & SOQL Using sf cli
-
-## Run SOQL query
-sf data query --query "SELECT id, Name, Account.Name FROM Opportunity Order By Amount DESC LIMIT 10" --target-org ExactPath
-
-## Run SOQL query in multiple lines, use backslashes
+### Multi-line Query (use trailing backslashes)
+```bash
 sf data query \
---query "SELECT id, Name, Account.Name FROM Opportunity Order By Amount DESC LIMIT 10" \
---target-org ExactPath
+  --query "SELECT Id, Name, Account.Name FROM Opportunity ORDER BY Amount DESC LIMIT 10" \
+  --target-org ExactPath
+```
 
-## Store SOQL query as CSV (ensure save folders exist)
-sf data query --query "SELECT id, Name,  Account.Name FROM Opportunity Order By Amount DESC LIMIT 10" --target-org ExactPath --result-format csv --output-file data/query.csv
+### Save Query Results as CSV
+> Ensure the target output folder already exists.
+```bash
+sf data query --query "SELECT Id, Name, Account.Name FROM Opportunity ORDER BY Amount DESC LIMIT 10" \
+  --target-org ExactPath --result-format csv --output-file data/query.csv
+```
 
-## Find specific records
+### SOSL Search (find specific records)
+```bash
 sf data search --query "FIND {Anna} IN Name Fields RETURNING Contact(Id, Name, Email)" --target-org ExactPath
+```
 
-Notes: Data command can also get, create, delete, upsert and more (check --help)...
+> 💡 The `sf data` command family also supports `get`, `create`, `delete`, and `upsert` — check `sf data --help` for the full list.
 
---
+---
 
-# Import & Export data using sf cli (useful for moving data between sandboxes/envs)
+## 7. Import & Export Data
 
+> 🚧 **TODO:** Not yet documented. Continue from Udemy course — *Video 87: Import & Export Data Using SF CLI* — and fill in the commands for moving data between sandboxes/environments (e.g. `sf data import tree`, `sf data export tree`).
 
+---
 
+## 8. Salesforce Extension Pack Commands (VS Code Command Palette)
 
+**Prerequisites:**
+- Salesforce CLI
+- Salesforce Extension Pack (Expanded)
+- JDK 21+
 
-
-!!! CHEAT SHEET STATUS !!!
-CONTINUE WRITING FROM UDEMY VIDEO 87 IMPORT & EXPORT DATA USING SF CLI
-
-
-
-
-
-
-----
-----
-
-
-
-# Salesforce Extension Pack Commands (Create Projects and Components)
-
-## Prerequisites to use commands (input into VS Code command prompt )
- - Salesforce CLI
- - Salesforce Extension Pack (Expanded)
- - JDK 21 or higher
-
-## Create New Project
->SFDX: Create Project with Manifest
-
-## Authorize an org (this is the same as the above sf org login web)
->SFDX: Authorize an Org
-
-## Run Diff on Local file vs Org File
-Right Click on code > >SFDX: Run Diff...
+| Action | Command Palette Entry |
+|---|---|
+| Create a new project with manifest | `SFDX: Create Project with Manifest` |
+| Authorize an org (same as `sf org login web`) | `SFDX: Authorize an Org` |
+| Diff a local file against the org version | Right-click file → `SFDX: Run Diff...` |
