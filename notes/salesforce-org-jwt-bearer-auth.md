@@ -1,57 +1,29 @@
-# Salesforce JWT Bearer Authentication Cheat Sheet
+# Salesforce JWT Bearer Authentication - Setup Guide
 
-Passwordless server-to-server authentication using OAuth 2.0 JWT Bearer Flow with External Client Apps (ECA)
+A complete reference for setting up passwordless, server-to-server Salesforce authentication using the OAuth 2.0 JWT Bearer flow with External Client Apps (ECA) - the modern replacement for Connected Apps in Salesforce.
 
+> **Why External Client Apps?** Starting Spring '26, Salesforce requires new integrations to use External Client Apps (ECAs) instead of Connected Apps. ECAs are fully metadata-compliant, support modern CI/CD workflows, enforce a closed security model by default, and cleanly separate developer-controlled settings from admin-controlled subscriber policies.
 
-## Why External Client Apps (ECA)?
+## Overview
 
-Beginning with **Spring '26**, Salesforce requires **External Client Apps (ECAs)** for new integrations instead of Connected Apps.
+The JWT Bearer Token flow allows a server application to authenticate to Salesforce without any user interaction or browser redirect. The client proves its identity by signing a JSON Web Token (JWT) using a private key. Salesforce validates the signature using the public certificate registered in an External Client App.
 
-### Benefits
+```
+App (server.key) → signs JWT → Salesforce verifies with server.crt → returns access_token
+```
 
-* ✅ Fully metadata compliant
-* ✅ CI/CD friendly
-* ✅ Closed security model by default
-* ✅ Separation of developer configuration and admin policies
+**When to use this flow:**
 
+- CI/CD pipelines (GitHub Actions, Jenkins, Azure DevOps, Salesforce DevOps Center)
+- ETL tools and middleware integrations
+- Scheduled Apex-to-external or external-to-Salesforce API calls
+- Any scenario where a human login is not possible
 
-## Best Practice
-
-Create a dedicated **service (integration) user** specifically for automated deployments instead of using a developer's personal account.
-
-Benefits include:
-
-* Clear audit history for automated deployments
-* Deployments continue if team members leave
-* Least-privilege permissions can be assigned
-* No dependency on personal credentials
-* Easier management of profiles and permission sets
-
-> **Important:** The External Client App does **not** replace the Salesforce user. It replaces the OAuth client (formerly the Connected App). A valid, active Salesforce user with the appropriate permissions is still required for every JWT Bearer authentication.
-
-
-## Ideal Use Cases
-
-* CI/CD Pipelines
-
-  * GitHub Actions
-  * Jenkins
-  * Azure DevOps
-  * Salesforce DevOps Center
-* ETL integrations
-* Middleware
-* Scheduled API jobs
-* Any server-side integration requiring passwordless authentication
-
-  
 ## Prerequisites
 
-* OpenSSL
-  * macOS/Linux: preinstalled
-  * Windows: install OpenSSL
-* Salesforce CLI (`sf`)
-* Salesforce Org access
-
+- **OpenSSL** - Pre-installed on macOS/Linux. Download for Windows
+- **Salesforce CLI (SFDX)**
+- **Salesforce org access**
 
 ## Authentication Identity
 
@@ -90,331 +62,175 @@ All Metadata and API operations execute using that user's permissions
 ```
 
 
----
+## Phase 1 - Create Private Key and Certificate
 
-# Phase 1 — Generate Keys & Certificate
+All commands below are run in your terminal from a dedicated folder (e.g. `~/jwt/`).
 
-Run all commands from a dedicated folder.
+### Step 1.1 - Set OpenSSL config path (Windows only)
 
-```text
-~/jwt/
-```
-
-
-## Step 1.1 (Windows Only)
-
-Set the OpenSSL configuration path.
-
-```cmd
+```bash
 set OPENSSL_CONF=C:\openssl\share\openssl.cnf
 ```
 
-> Skip on macOS and Linux.
+Skip this step on macOS and Linux.
 
+### Step 1.2 - Generate an encrypted RSA private key
 
-## Step 1.2 Generate Encrypted RSA Private Key
+Creates a DES3-encrypted 2048-bit RSA private key. The passphrase `x` is temporary and is only used to produce the clean key in the next step.
 
 ```bash
 openssl genrsa -des3 -passout pass:x -out server.pass.key 2048
 ```
 
-Produces:
+**Output:** `server.pass.key` - the encrypted private key file.
 
-```
-server.pass.key
-```
+> **What is the encrypted file?** `server.pass.key` is the encrypted form of your private key. The `-des3` flag applies Triple DES symmetric encryption using the passphrase you supply. This protects the raw key material at rest. You would use this file when a tool or workflow specifically requires an encrypted PEM key.
 
-### Purpose
+### Step 1.3 - Strip encryption and create the plain key
 
-An encrypted 2048-bit RSA private key protected with Triple DES.
-
-
-## Step 1.3 Create Plain Private Key
+Extracts the raw RSA private key from the encrypted file. Most tools - including the Salesforce CLI - consume this unencrypted version directly.
 
 ```bash
 openssl rsa -passin pass:x -in server.pass.key -out server.key
 ```
 
-Produces:
+**Output:** `server.key` - the unencrypted RSA private key.
 
-```
-server.key
-```
+> You can safely delete `server.pass.key` after this step. Keep `server.key` secret - it acts as a password. Anyone with this file can authenticate as your ECA integration user.
 
-### Notes
-
-* Used directly by Salesforce CLI
-* Keep this file secret
-* Delete `server.pass.key` after creation if no longer needed
-
-
-## Step 1.4 Generate Certificate Signing Request (CSR)
+### Step 1.4 - Generate the Certificate Signing Request (CSR)
 
 ```bash
 openssl req -new -key server.key -out server.csr
 ```
 
-Example values:
+You will be prompted to fill in identity details. These are embedded in the certificate:
 
-| Field               | Example                                           |
-| ------------------- | ------------------------------------------------- |
-| Country             | IN                                                |
-| State               | Uttar Pradesh                                     |
-| Locality            | Ghaziabad                                         |
-| Organization        | Your Company Name                                 |
-| Organizational Unit | DevOps                                            |
-| Common Name         | Leave blank or org domain                         |
-| Email               | [you@yourcompany.com](mailto:you@yourcompany.com) |
+| Field | Example |
+|---|---|
+| Country Name | `IN` |
+| State or Province | `Uttar Pradesh` |
+| Locality Name | `Ghaziabad` |
+| Organization Name | `Your Company Name` |
+| Organizational Unit | `DevOps` |
+| Common Name | (leave blank or use your org domain) |
+| Email Address | `you@yourcompany.com` |
 
-Produces:
+**Output:** `server.csr` - the certificate signing request.
 
-```
-server.csr
-```
+### Step 1.5 - Self-sign the X.509 certificate
 
----
-
-## Step 1.5 Create Self-Signed Certificate
+Signs the CSR with your own private key to produce a self-signed certificate valid for 365 days.
 
 ```bash
-openssl x509 \
-  -req \
-  -sha256 \
-  -days 365 \
-  -in server.csr \
-  -signkey server.key \
-  -out server.crt
+openssl x509 -req -sha256 -days 365 -in server.csr -signkey server.key -out server.crt
 ```
 
-Produces:
+**Output:** `server.crt` - the X.509 certificate. This is the file you upload to the External Client App.
 
-```
-server.crt
-```
+### Files produced
 
-This certificate is uploaded into Salesforce.
+| File | Description |
+|---|---|
+| `server.pass.key` | Encrypted private key |
+| `server.key` | Plain RSA private key for JWT signing |
+| `server.csr` | Certificate signing request |
+| `server.crt` | X.509 certificate - upload to ECA |
 
-# Generated Files
+## Phase 2 - Create an External Client App (ECA)
 
-| File              | Purpose                                         |
-| ----------------- | ----------------------------------------------- |
-| `server.pass.key` | Encrypted private key                           |
-| `server.key`      | Plain RSA private key used for JWT signing      |
-| `server.csr`      | Certificate Signing Request                     |
-| `server.crt`      | Public X.509 certificate uploaded to Salesforce |
+### Step 2.1 - Navigate to External Client App Manager
 
----
+1. Go to Salesforce Setup
+2. In the Quick Find box, type `External`
+3. Select **External Client App Manager** from the dropdown
+4. Click **New External Client App** (top right corner)
 
-# Phase 2 — Create an External Client App (ECA)
+### Step 2.2 - Basic information
 
-## Step 2.1 Navigate
+Fill in the following fields:
 
-```
-Setup
-    ↓
-Quick Find
-    ↓
-External Client App Manager
-    ↓
-New External Client App
-```
+- **External Client App Name** - A human-readable name (e.g. `JWT Integration App`)
+- **API Name** - Auto-filled based on the name; used in metadata and deployments
+- **Distribution State** - `Local` for single-org use; `Packageable` for ISV/multi-org scenarios
+- **Description** - (Optional) Describe the integration purpose
 
+### Step 2.3 - Enable OAuth and upload certificate
 
-## Step 2.2 Basic Information
+1. Scroll down and expand the **API (Enable OAuth Settings)** section
+2. Click **Enable OAuth**
+3. Enter the Callback URL:
 
-Fill in:
+   ```
+   http://localhost:1717/OauthRedirect
+   ```
 
-| Field                    | Value                             |
-| ------------------------ | --------------------------------- |
-| External Client App Name | JWT Integration App               |
-| API Name                 | Auto-generated                    |
-| Distribution State       | Local (single org) or Packageable |
-| Description              | Optional                          |
+4. Under **Flow Enablement**, select **JWT Bearer Flow**
+5. Upload your `server.crt` certificate file when prompted for a public certificate
 
+### Step 2.4 - Select OAuth scopes and enable JWT flow
 
-## Step 2.3 Enable OAuth
+Select the following OAuth Scopes:
 
-Navigate to:
+- Manage user data via APIs (`api`)
+- Manage user data via Web browsers (`web`)
+- Perform requests at any time (`refresh_token`, `offline_access`)
 
-```
-API
-    ↓
-Enable OAuth Settings
-```
+Add additional scopes based on your integration requirements.
 
-Enable:
+Click **Create** to save the ECA.
 
-* OAuth
+### Step 2.5 - Configure OAuth policies (pre-authorization)
 
-Callback URL
+After creating the ECA, navigate to the **Policies** tab and click **Edit**:
 
-```text
-http://localhost:1717/OauthRedirect
-```
+1. Under **OAuth Policies**, set:
+   - **Permitted Users** → `Admin approved users are pre-authorized`
+   - Confirm the warning prompt if it appears
+2. Under **App Policies**, add the appropriate Profile or Permission Set for the integration user
+3. Click **Save**
 
-Flow Enablement
+> **Without this step, JWT authentication will fail with:**
+>
+> ```json
+> {"error":"invalid_grant","error_description":"user hasn't approved this consumer"}
+> ```
+>
+> Or the ECA-specific error:
+>
+> ```json
+> {"error":"app_not_found","error_description":"External client app is not installed in this org"}
+> ```
 
-* ✅ JWT Bearer Flow
+### Step 2.6 - Retrieve Consumer Key
 
-Upload
+1. On the ECA detail page, click the **Settings** tab
+2. Under **OAuth Settings**, click **Consumer Key and Secret**
+3. Verify your identity with the emailed verification code
+4. Copy and securely store the **Consumer Key** - you will need it for JWT claims and CLI commands
 
-```
-server.crt
-```
+## Phase 3 - Authenticate and Get an Access Token
 
-
-## Step 2.4 OAuth Scopes
-
-Recommended scopes:
-
-* API (`api`)
-* Web (`web`)
-* Refresh Token (`refresh_token`)
-* Offline Access (`offline_access`)
-
-Add any additional scopes required by your integration.
-
-Click **Create**.
-
-
-## Step 2.5 OAuth Policies (Required)
-
-After creation:
-
-```
-Policies
-    ↓
-Edit
-```
-
-### OAuth Policies
-
-```
-Permitted Users
-
-→ Admin approved users are pre-authorized
-```
-
-### App Policies
-
-Assign either:
-
-* Integration User Profile
-
-or
-
-* Permission Set
-
-Save.
-
-
-### Common Errors
-
-**User not pre-authorized**
-
-```json
-{
-  "error":"invalid_grant",
-  "error_description":"user hasn't approved this consumer"
-}
-```
-
-**App not installed**
-
-```json
-{
-  "error":"app_not_found",
-  "error_description":"External client app is not installed in this org"
-}
-```
-
-
-## Step 2.6 Retrieve Consumer Key
-
-Navigate to:
-
-```
-Settings
-    ↓
-OAuth Settings
-    ↓
-Consumer Key and Secret
-```
-
-Verify your identity.
-
-Copy the:
-
-```
-Consumer Key
-```
-
-You'll need it for:
-
-* JWT claims
-* Salesforce CLI authentication
-
----
-
-# Phase 3 — Authenticate
-
-## Salesforce CLI Login
+### Salesforce CLI (SFDX)
 
 ```bash
 sf org login jwt \
-  --username <USERNAME> \
+  --username <Your-username> \
   --jwt-key-file server.key \
-  --client-id <CONSUMER_KEY> \
+  --client-id <Client-ID> \
   --alias pre-release-org \
   --set-default \
   --instance-url https://login.salesforce.com
 ```
 
-Success:
+**On success:**
 
-```text
-Successfully authorized your@salesforce.user
-with org ID 00DXXXXXXXXXXXXXXX
+```
+Successfully authorized your@salesforce.user with org ID 00DXXXXXXXXXXXXXXX
 ```
 
----
-
-# Deploy Example
+**Deploy using Salesforce CLI:**
 
 ```bash
-sf project deploy start \
-  --source-dir force-app
+sf project deploy start --source-dir force-app
 ```
-
----
-
-# Quick Reference
-
-## Required Files
-
-| File                | Used Where       |
-| ------------------- | ---------------- |
-| `server.key`        | CLI JWT login    |
-| `server.crt`        | Upload to ECA    |
-| Consumer Key        | CLI & JWT claims |
-| Salesforce Username | CLI login        |
-
-
-## JWT Authentication Checklist
-
-* [ ] Install OpenSSL
-* [ ] Install Salesforce CLI
-* [ ] Generate encrypted key
-* [ ] Generate `server.key`
-* [ ] Generate CSR
-* [ ] Generate `server.crt`
-* [ ] Create External Client App
-* [ ] Enable OAuth
-* [ ] Enable JWT Bearer Flow
-* [ ] Upload `server.crt`
-* [ ] Select OAuth scopes
-* [ ] Set **Admin approved users are pre-authorized**
-* [ ] Assign Profile/Permission Set
-* [ ] Copy Consumer Key
-* [ ] Authenticate using `sf org login jwt`
-* [ ] Deploy or invoke Salesforce APIs
