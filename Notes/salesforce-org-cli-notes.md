@@ -128,6 +128,8 @@ sf project retrieve start --target-org <alias> --metadata ApexClass:ClassName
 sf project retrieve start --target-org <alias> --manifest manifest/package.xml
 ```
 
+> 💡 If a prod org is large, a batch process to retrieve meta data can be used. Resource reference: RyanJosephLock/documents/Notes/Resources/retrieve_metadata_batches.sh
+
 ---
 
 ## 6. SOQL & SOSL Queries
@@ -266,6 +268,8 @@ sf org create scratch --target-dev-hub MAIN_ORG --definition-file config/project
 sf project deploy start --source-dir force-app
 
 6. Scratch Org can be viewed in UI "App Launcher > Active Scratch Orgs" and "App Launcher > Active Scratch Org Info"
+
+X. Automate scratch org management with script. Resource reference: RyanJosephLock/documents/Notes/Resources/setup-scratch-org.sh
 
 ```
 
