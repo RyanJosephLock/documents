@@ -280,7 +280,7 @@ sf org delete scratch --target-org test-jksdhfds23@example.com
 
 ---
 
-## 10. Salesforce Extension Pack Commands (VS Code Command Palette)
+## 11. Salesforce Extension Pack Commands (VS Code Command Palette)
 
 **Prerequisites:**
 - Salesforce CLI
