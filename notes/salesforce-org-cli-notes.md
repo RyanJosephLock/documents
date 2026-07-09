@@ -23,7 +23,7 @@
 
 ### Login via Terminal
 ```bash
-sf org login web --alias ExactPath --instance-url https://test.my.salesforce.com/
+sf org login web --alias srgSIT --instance-url https://superretailgroupservicesptyltd--sit.sandbox.my.salesforce.com/
 ```
 
 ### View Logged-in Orgs
@@ -151,7 +151,39 @@ sf data search --query "FIND {Anna} IN Name Fields RETURNING Contact(Id, Name, E
 
 ## 7. Import & Export Data
 
-> 🚧 **TODO:** Not yet documented. Continue from Udemy course — *Video 87: Import & Export Data Using SF CLI* — and fill in the commands for moving data between sandboxes/environments (e.g. `sf data import tree`, `sf data export tree`).
+### Export Data (Tree Format)
+> Exports records as JSON tree files — useful for **migrating data between orgs/sandboxes** since it preserves parent-child relationships.
+```bash
+sf data export tree --query "SELECT Id, Name FROM Account" --target-org ExactPath --output-dir data
+```
+
+### Import Data (Tree Format)
+```bash
+sf data import tree --files data/Account.json --target-org ExactPath
+```
+
+### Generate an Export Plan
+> `--plan` generates a plan definition file that groups multiple related objects (e.g. Account + Contact) into a single, ordered import/export job.
+```bash
+sf data export tree --query "SELECT Id, Name FROM Account" --target-org ExactPath --output-dir data --plan
+```
+
+> 💡 SOQL queries can be referenced from a file instead of typed inline — handy for long or reused queries.
+> ```bash
+> sf data export tree --query-file queries/accounts.soql --target-org ExactPath --output-dir data
+> ```
+
+### Bulk API — Export Data
+```bash
+sf data export bulk --query "SELECT Id, Name FROM Account" --target-org ExactPath --output-file data/accounts.csv
+```
+
+### Bulk API — Import Data
+```bash
+sf data import bulk --sobject Account --file data/accounts.csv --target-org ExactPath
+```
+
+> 💡 Bulk API commands (`export bulk` / `import bulk`) are best for **large data volumes** (CSV-based), while `export tree` / `import tree` are best for **small, relational datasets** (JSON-based, preserves record relationships).
 
 ---
 
