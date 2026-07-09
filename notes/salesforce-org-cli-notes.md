@@ -23,7 +23,7 @@
 
 ### Login via Terminal
 ```bash
-sf org login web --alias srgSIT --instance-url https://superretailgroupservicesptyltd--sit.sandbox.my.salesforce.com/
+sf org login web --alias <alias> --instance-url https://superretailgroupservicesptyltd--sit.sandbox.my.salesforce.com/
 ```
 
 ### View Logged-in Orgs
@@ -31,7 +31,7 @@ sf org login web --alias srgSIT --instance-url https://superretailgroupservicesp
 sf org list
 ```
 
-### Connect a Local Project to an Org
+### Connect/Deploy a Project to an Org
 > Requires the SFDX project files to already exist locally.
 ```bash
 sf config set target-org <username-or-alias>
@@ -45,6 +45,17 @@ sf org open
 ### Deploy a Project (manual or pipeline)
 ```bash
 sf project deploy
+```
+
+### Deploy a Project with Test Classes (all or selected)
+```bash
+sf project deploy start --source-dir force/app/main/default --target-org <alias> --test-level RunAllTestsInOrg/RunLocalTests/RunSpecifiedTests/RunRelevantTests/...
+sf project deploy start --source-dir force/app/main/default --target-org <alias> --test-level RunSpecifiedTests AccountServiceTest CaseEmailServiceTest
+```
+
+### Login using sfdx-url (external application, i.e. ci/cd)
+```bash
+sf org login sfdx-url tmp/authFile.txt --set-default --alias <alias>
 ```
 
 ---
@@ -149,7 +160,34 @@ sf data search --query "FIND {Anna} IN Name Fields RETURNING Contact(Id, Name, E
 
 ---
 
-## 7. Import & Export Data
+## 7. View and Update System Data
+
+### Salesforce CLI - Example Assign Permission Set
+```bash
+sf org assign permset \
+  --name Example_permissionset Stripe_Object_Permissions \
+  --on-behalf-of user1@example.com \
+  --on-behalf-of user1@example.com \
+  --target-org <alias>
+```
+
+### Run Apex - Example Assign Permission Set
+```bash
+sf apex run --file scripts/apex/hello.apex --target-org <alis>
+```
+
+> 💡 Running Apex can execute a range of things in pipelines or run manually, including assigning Permission Sets.
+
+### Check the API version and the available limits in the org (i.e credits, scratch org, etc)
+```bash
+sf limits api display
+sf limits api display --target-org <alias>
+sf limits api display -o order-management | grep Scratch
+```
+
+---
+
+## 8. Import & Export Data
 
 ### Export Data (Tree Format)
 > Exports records as JSON tree files — useful for **migrating data between orgs/sandboxes** since it preserves parent-child relationships.
@@ -187,7 +225,62 @@ sf data import bulk --sobject Account --file data/accounts.csv --target-org Exac
 
 ---
 
-## 8. Salesforce Extension Pack Commands (VS Code Command Palette)
+## 9. Scratch Org
+
+> 💡 Scratch orgs are temporary, configurable Salesforce environments used for development and CI/CD. Created in minutes and lasting up to 30 days. Limit 3 scratch orgs at a time.
+
+### Create Scratch Org
+```bash
+1. Ensure Dev Hub and Source Tracking in Developer and Developer Pro Sandboxes is enabled. Dev Hub enables ActiveStratchOrg and ScratchOrgInfo objects (note custom fields can be added to ScratchOrgInfo to customise created scratch orgs).
+
+2. Authorize an existing Salesforce Org (SFDX command or CLI)
+>SFDX: Authorize a Dev Hub
+sf org login web --set-default-dev-hub --alias MAIN_ORG
+
+3. Scratch org definition file example (Docs: https://developer.salesforce.com/docs/atlas.en-us.sfdx_dev.meta/sfdx_dev/sfdx_dev_scratch_orgs_def_file.htm)
+{
+  "orgName": "PantherSchools",
+  "edition": "Enterprise",
+  "hasSampleData": true,
+  "adminEmail": "youremail@gmail.com",
+  "description": "This is sample org used for the deployment validation purpose!",
+  "workItem__c": "TICKET-23245",
+  "userStory__c": "US-12345",
+  "features": [
+    "EnableSetPasswordInApi"
+  ],
+  "settings": {
+    "lightningExperienceSettings": {
+      "enableS1DesktopEnabled": true
+    },
+    "mobileSettings": {
+      "enableS1EncryptedStoragePref2": false
+    }
+  }
+}
+
+4. Create scratch org
+sf org create scratch --target-dev-hub MAIN_ORG --definition-file config/project-scratch-def.json --set-default --duration-days 1
+
+5. Deploy project to scratch org (the target org is already set to scratch org)
+sf project deploy start --source-dir force-app
+
+6. Scratch Org can be viewed in UI "App Launcher > Active Scratch Orgs" and "App Launcher > Active Scratch Org Info"
+
+```
+
+### Useful Scratch Org Commands
+```bash
+CHANGE PASSWORD
+sf org generate password --length 25 --complexity 5 --target-org test-jksdhfds23@example.com
+
+DELETE SCRATCH ORG
+sf org delete scratch --target-org test-jksdhfds23@example.com
+```
+
+---
+
+## 10. Salesforce Extension Pack Commands (VS Code Command Palette)
 
 **Prerequisites:**
 - Salesforce CLI
