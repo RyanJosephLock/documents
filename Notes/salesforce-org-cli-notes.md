@@ -23,7 +23,7 @@
 
 ### Login via Terminal
 ```bash
-sf org login web --alias <alias> --instance-url https://superretailgroupservicesptyltd--sit.sandbox.my.salesforce.com/
+sf org login web --alias <alias> --instance-url https://test.my.salesforce.com/
 ```
 
 ### View Logged-in Orgs
