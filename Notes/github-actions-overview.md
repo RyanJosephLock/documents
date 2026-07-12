@@ -98,8 +98,126 @@ on:
 
 > **Pro tip:** Use `paths:` filters with `push` and `pull_request` to only trigger workflows when specific files change. This dramatically reduces unnecessary runs.
 
-## Your First Workflow
+---
 
-Let's build a complete, production-ready CI workflow from scratch. This one checks out code, sets up the environment, runs tests, and reports status.
+# GitHub Actions Contexts
 
-*(continued in next section of the source document)*
+Contexts let you access information about workflow runs, runner environments, jobs, steps, and more inside expressions (`${{ }}`). Below is a breakdown of the most commonly used contexts.
+
+---
+
+## `github` — info about the event & repo
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `github.event_name` | `"push"` / `"pull_request"` / `"workflow_dispatch"` | The event that triggered the workflow |
+| `github.ref` | `"refs/heads/main"` | The branch or tag ref that triggered the run |
+| `github.sha` | `"abc123..."` | The commit SHA that triggered the run |
+| `github.actor` | `"octocat"` | The username that triggered the run |
+| `github.repository` | `"owner/repo"` | Owner and repository name |
+| `github.event` | *full webhook payload object* | The complete JSON payload for the triggering event |
+
+**Common extras (not in the screenshot, but frequently used):**
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `github.workflow` | `"CI"` | Name of the workflow |
+| `github.run_id` | `"1658821493"` | Unique ID for this workflow run |
+| `github.run_number` | `"42"` | Incrementing run number for the workflow |
+| `github.job` | `"build"` | The `job_id` of the currently running job |
+| `github.workspace` | `"/home/runner/work/repo/repo"` | Default working directory on the runner |
+| `github.token` | *masked* | Auto-generated `GITHUB_TOKEN` for API auth |
+| `github.base_ref` | `"main"` | Base branch (PR events only) |
+| `github.head_ref` | `"feature/xyz"` | Head branch (PR events only) |
+
+---
+
+## `env` — workflow/job/step env vars
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `env.MY_VAR` | *value of `$MY_VAR`* | Any variable defined in `env:` blocks at workflow, job, or step level |
+
+```yaml
+env:
+  MY_VAR: "hello-world"
+
+steps:
+  - run: echo "${{ env.MY_VAR }}"
+```
+
+---
+
+## `secrets` — encrypted secrets
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `secrets.MY_TOKEN` | `***` (masked) | Pulled from repo/org/environment secrets; always masked in logs |
+
+```yaml
+- name: Authenticate
+  run: sf org login jwt --client-id ${{ secrets.CLIENT_ID }}
+```
+
+> ⚠️ Secrets are never printed in plaintext in logs — GitHub automatically redacts them, even if you try to echo them out.
+
+---
+
+## `runner` — info about the runner machine
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `runner.os` | `"Linux"` | Also `"Windows"`, `"macOS"` |
+| `runner.arch` | `"X64"` | Also `"ARM"`, `"ARM64"` |
+| `runner.name` | `"GitHub Actions 2"` | Name of the runner |
+| `runner.temp` | `/tmp` | Path to a temp directory scoped to the run |
+| `runner.tool_cache` | *path* | Path to cached tools directory |
+
+---
+
+## `job` — current job status
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `job.status` | `"success"` / `"failure"` / `"cancelled"` | Status of the current job, useful in `if:` conditions on later steps |
+
+```yaml
+- if: ${{ job.status == 'failure' }}
+  run: echo "Something upstream failed"
+```
+
+---
+
+## `steps` — outputs from previous steps
+
+| Property | Example Value | Notes |
+|---|---|---|
+| `steps.<step-id>.outputs.<output-name>` | *custom value* | Requires the step to have an `id:` and to set an output |
+
+```yaml
+steps:
+  - id: my-step-id
+    run: echo "my-output=hello" >> "$GITHUB_OUTPUT"
+
+  - run: echo "${{ steps.my-step-id.outputs.my-output }}"
+```
+
+---
+
+## Other useful contexts
+
+| Context | Purpose |
+|---|---|
+| `inputs` | Values passed into a reusable workflow or `workflow_dispatch` |
+| `vars` | Configuration variables (non-secret) defined at repo/org/environment level |
+| `matrix` | Current combination in a `strategy.matrix` build |
+| `needs` | Outputs/results from jobs listed in `needs:` |
+| `strategy` | Info about the current matrix strategy (e.g. `fail-fast`) |
+
+---
+
+### Quick syntax reminder
+
+- Access with double curly braces: `${{ context.property }}`
+- Use in `if:`, `env:`, `run:`, and most `with:` fields
+- `github.event` is a deeply nested object — drill in with dot notation matching the webhook payload (e.g. `github.event.pull_request.number`)
