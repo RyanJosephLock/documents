@@ -221,3 +221,74 @@ steps:
 - Access with double curly braces: `${{ context.property }}`
 - Use in `if:`, `env:`, `run:`, and most `with:` fields
 - `github.event` is a deeply nested object — drill in with dot notation matching the webhook payload (e.g. `github.event.pull_request.number`)
+
+---
+
+# Environment Variables & Secrets
+
+## Environment Variables
+
+Environment variables carry non-sensitive configuration into your workflow. They can be scoped to the entire workflow, a single job, or a single step.
+
+### Example: Env Var Scopes Demo
+
+```yaml
+name: Env Var Scopes Demo
+
+# ① Workflow-level - available to ALL jobs and steps
+env:
+  NODE_ENV:  production
+  APP_NAME: my-awesome-app
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    # ② Job-level - overrides workflow-level for this job
+    env:
+      BUILD_DIR: ./dist
+    steps:
+      - name: Build
+        # ③ Step-level - overrides job & workflow for this step only
+        env:
+          VERBOSE: true
+        run: |
+          echo "App: $APP_NAME"        # from workflow env
+          echo "Build dir: $BUILD_DIR" # from job env
+          echo "Verbose: $VERBOSE"     # from step env
+```
+
+**Scope precedence:** step-level > job-level > workflow-level. Each narrower scope overrides the broader one for that context only.
+
+### Default Environment Variables
+
+GitHub pre-populates these on every runner — no setup required.
+
+---
+
+## Defining Configuration Variables for Multiple Workflows
+
+You can create configuration variables for use across multiple workflows, and can define them at either the **organization**, **repository**, or **environment** level.
+
+For example, you can use configuration variables to set default values for parameters passed to build tools at an organization level, but then allow repository owners to override these parameters on a case-by-case basis.
+
+When you define configuration variables, they are automatically available in the `vars` context.
+
+Reference: [Using the vars context to access configuration variable values](https://docs.github.com/en/actions/how-tos/write-workflows/choose-what-workflows-do/use-variables#creating-configuration-variables-for-an-organization)
+
+### Use Env Vars When
+- Value is a URL, path, or flag
+- Value is safe to see in logs
+- Value changes between environments
+- Value doesn't grant access to anything sensitive
+
+---
+
+## GitHub Secrets
+
+Secrets are encrypted key-value pairs stored securely in GitHub. They're injected into workflows at runtime and never appear in logs.
+
+### How to Create a Secret
+1. Go to your **GitHub repo → Settings → Secrets and variables → Actions**
+2. Click **"New repository secret"**
+3. Enter a name (e.g. `AWS_ACCESS_KEY_ID`) and value
+4. Click **Add secret** - the value is now encrypted and never visible again
